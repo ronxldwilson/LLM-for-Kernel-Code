@@ -1,0 +1,182 @@
+## 📘 Paper Overview
+
+* **Title:** KGYM: A Platform and Dataset to Benchmark Large Language Models on Linux Kernel Crash Resolution
+* **Authors:** Alex Mathai, Chenxi Huang, Petros Maniatis, et al.
+* **Context:** NeurIPS 2024, Datasets & Benchmarks Track
+
+---
+
+## 1. Motivation & Contributions
+
+* **Real-World Gap:** Existing code benchmarks (e.g., HumanEval, APPS) focus on synthetic or isolated coding tasks.
+
+* **Systems-Level Complexity:** Linux kernel is:
+
+  * Vast (20M+ LOC across 50k+ files)
+  * Multilingual (C, Assembly, Bash, Rust)
+  * Concurrent and hardware-sensitive
+  * Difficult to reason about without context
+
+* **Goal:** Evaluate if LLMs can autonomously debug/fix real kernel crashes.
+
+### Key Contributions:
+
+1. **KGYM Platform:**
+
+   * Automates building + patching + reproducing kernel bugs in parallel VMs;
+   * Scalable: 10 VMs → \~720 kernel jobs/day;
+
+2. **KBENCHSYZ Dataset:**
+
+   * 279 real-world crash/bug fixes from Syzkaller
+   * Each sample includes:
+
+     * commit versions (bug and fix)
+     * reproducible crash report
+     * reproducer script
+     * human-written fix
+     * email discussions
+
+3. **Baseline LLM Evaluation:**
+
+   * Benchmarks SOTA LLMs (GPT-4 Turbo, Claude-3 Sonnet, Gemini, Code Llama)
+   * Testing in two settings:
+
+     * **Oracle-assisted** (files known)
+     * **BM25 retrieval** (using top-3 file matching)
+   * Results:
+
+     * Best solve: **5.38%** in Oracle (GPT-4 Turbo)
+     * Unassisted: **0.72%** (GPT-4 Turbo)
+
+---
+
+## 2. KGYM: System Architecture
+
+* **Components:**
+
+  1. **Kbuilder:**
+
+     * Clones Linux repo → checks out commit → applies patch → compiles via `syz-build` → uploads VM disk image
+  2. **Kreproducer:**
+
+     * Launches emulator VM → runs crash reproducer → collects `dmesg`/panic logs
+  3. **Scheduler:**
+
+     * Distributes build/test tasks across VMs → tracks jobs in SQLite
+  4. **Clerk API:**
+
+     * Python interface for researchers to automate LLM + build + test loops
+
+* **Workflow:**
+
+  1. Reproduce crash on "buggy" commit
+  2. LLM generates patch(s)
+  3. Apply patch → rebuild → rerun reproducer
+  4. Verify if crash persists
+
+---
+
+## 3. KBENCHSYZ Dataset Details
+
+* **Sample Composition:** `(CommitBug, Config, Reproducer, CommitFix, CommitParent, CrashParent, Fix)`
+
+* **Filtering Criteria:**
+
+  1. Crash reproducible on bug commit
+  2. Crash reproducible on parent commit
+  3. Fix verifies crash is gone
+
+* **Dataset Stats:**
+
+  * **Kernel versions:** 4.x → 5.x → 6.x (2015–2023); e.g., 141 in 5.x
+  * **Fix granularity:**
+
+    * 33 single-line
+    * 145 single-function
+    * 57 multi-function (single file)
+    * 44 multi-file
+  * **Avg changes:**
+
+    * 14.3 LOC across 1.28 files
+    * Crash logs: \~84 lines up to 624
+  * **Subsystem coverage:** 72 subsystems (e.g., net, usb, fs)
+
+---
+
+## 4. Experimental Setup
+
+* **LLMs Tested:**
+
+  * Closed: GPT-3.5 Turbo, GPT-4 Turbo, Claude‑3 Sonnet, Gemini‑1.5 Pro
+  * Open: Code Llama-Instruct (7B, 13B, 34B), Llama‑3‑8B
+
+* **Two Prompt Settings:**
+
+  1. **Oracle retrieval:** includes only modified files in prompt
+  2. **Sparse BM25 retrieval:** top‑3 file match from crash logs
+
+* **Prompt constraints:**
+
+  * Max context: 16k-50k tokens
+  * Bug subset sizes: Oracle: 117–228; BM25: 227–275
+
+---
+
+## 5. Results & Analysis
+
+### Patch Generation
+
+* **Apply Rate:**
+
+  * GPT-4 Turbo: \~57% (Oracle), \~55% (BM25) valid syntax
+  * GPT-3.5: \~15–41%
+
+* **Solve Rate:**
+
+  * GPT-4 Turbo: 5.38% (Oracle), 0.72% (BM25)
+  * GPT-3.5: 1.08%/0.36%
+  * Others: near 0%
+
+* **Combined (all LLMs):** 10.39% solved unique bugs
+
+### Qualitative Example
+
+* GPT-4 localizes correctly but uses `kfree` unsafely versus human fix using null checks and custom free logic
+
+---
+
+## 6. Discussions & Limitations
+
+* **Compute costs:**
+
+  * Kernel builds: 15–20 min each
+  * Tests: \~10 min
+  * Total per iteration: 17–30 min
+
+* **Reproducer scope:**
+
+  * One-shot reproducer → may miss broader regressions
+  * Suggest combining with extensive test suites like Linux Testing Project or kselftest
+
+---
+
+## 7. Conclusion & Future Directions
+
+* **KGYM + KBENCHSYZ** establish a first large-scale benchmark for LLM-driven kernel crash resolution.
+* **Baseline LLMs** struggle; highest solve rate remains low (\~5%).
+* **Opportunities:**
+
+  * Better retrieval/localization
+  * Memory-safe, architecture-specific patch generation
+  * Handling concurrency and non-determinism
+  * Integration with broader testing pipelines
+
+---
+
+### 🔗 Repository
+
+KGYM code & dataset: `https://github.com/Alex-Mathai-98/kGym-Kernel-Playground`
+
+---
+
